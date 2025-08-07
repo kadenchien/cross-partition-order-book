@@ -1,6 +1,9 @@
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
+use serde_json;
+use cross_partition_order_book::types::order::Order;
 
 #[tokio::main]
 async fn main() {
@@ -13,19 +16,30 @@ async fn main() {
     println!("Producing 5 messages to 'orders' topic...");
 
     for i in 0..5 {
-        let key = format!("key-{}", i);
-        let payload = format!("hello kafka {}", i);
+        let order = Order {
+            id: Uuid::new_v4().to_string(),
+            instrument: format!("AAPL"),
+            side: if i % 2 == 0 { "buy" } else { "sell" }.to_string(),
+            price: 150.0 + i as f64,
+            quantity: 100 + i * 10,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64,
+        };
+
+        let payload = serde_json::to_string(&order).expect("Failed to serialize order");
 
         let delivery_status = producer
             .send(
                 FutureRecord::to("orders")
-                    .key(&key)
+                    .key(&order.instrument)
                     .payload(&payload),
                 Duration::from_secs(0),
             )
             .await;
 
-        println!("Sent: key='{}', payload='{}', status={:?}", key, payload, delivery_status);
+        println!("Sent order: {:?}, status={:?}", order, delivery_status);
     }
 
     println!("Done producing!");
