@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 use serde_json;
 use cross_partition_order_book::types::order::Order;
+use cross_partition_order_book::utils::partitioner::custom_partition;
 
 #[tokio::main]
 async fn main() {
@@ -30,11 +31,14 @@ async fn main() {
 
         let payload = serde_json::to_string(&order).expect("Failed to serialize order");
 
+        let partition = custom_partition(&order.instrument, 8);
+
         let delivery_status = producer
             .send(
                 FutureRecord::to("orders")
                     .key(&order.instrument)
-                    .payload(&payload),
+                    .payload(&payload)
+                    .partition(partition),
                 Duration::from_secs(0),
             )
             .await;
